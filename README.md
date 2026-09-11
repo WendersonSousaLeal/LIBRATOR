@@ -73,11 +73,24 @@ Facilitar a comunicação entre pessoas surdas e ouvintes por meio de um sistema
 
 | Rank | Prioridade | User Story | Estimativa | Sprint |
 |:---:|:---:|:---|:---:|:---:|
-| 1 | 🔴 Alta | Conversão automática dos sinais para texto | 5 | 1 |
-| 2 | 🔴 Alta | Histórico das frases traduzidas | 8 | 1 |
-| 3 | 🔴 Alta | Detecção das mãos (visão computacional) | 5 | 2 |
-| ... | 🟡 Média | ... | ... | ... |
-| 17 | 🟢 Baixa | Brindes | 2 | 3 |
+| 1 | 🔴 Alta | Pesquisa bibliográfica e mapeamento de dataset para LIBRAS | 5 | 1 |
+| 2 | 🔴 Alta | Detecção de mãos e pontos focais (visão computacional) | 8 | 1 |
+| 3 | 🔴 Alta | Estruturação preliminar da arquitetura do modelo de IA/Tradução | 5 | 1 |
+| 4 | 🟡 Média | Elaboração do documento base do TCC e capítulo de introdução | 3 | 1 |
+| 5 | 🔴 Alta | Treinamento do modelo para conversão automática de sinais em texto | 13 | 2 |
+| 6 | 🔴 Alta | Interface básica de captura de câmera e exibição da tradução | 5 | 2 |
+| 7 | 🟡 Média | Escrita do capítulo de Metodologia e Materiais/Métodos | 5 | 2 |
+| 8 | 🟡 Média | Testes de acurácia preliminares da interpretação dos gestos | 5 | 2 |
+| 9 | 🔴 Alta | Histórico das frases traduzidas e armazenamento local/nuvem | 5 | 3 |
+| 10 | 🟡 Média | Otimização de hiperparâmetros e redução de latência da IA | 8 | 3 |
+| 11 | 🟡 Média | Tabulação de métricas de desempenho (Acurácia, F1-Score) | 5 | 3 |
+| 12 | 🟢 Baixa | Exportação das transcrições do histórico em formato TXT/PDF | 3 | 3 |
+| 13 | 🔴 Alta | Redação do capítulo de Resultados, Discussão e Conclusão | 8 | 4 |
+| 14 | 🟡 Média | Adequação completa às normas ABNT/Institucionais | 5 | 4 |
+| 15 | 🟡 Média | Revisão ortográfica, gramatical e verificação de plágio | 3 | 4 |
+| 16 | 🔴 Alta | Elaboração dos slides de apresentação para a banca e Feira | 5 | 5 |
+| 17 | 🟡 Média | Preparação do ambiente de demonstração prática ao vivo (Live Demo) | 5 | 5 |
+| 18 | 🟢 Baixa | Criação de material gráfico/folders e brindes para a Feira de Soluções | 2 | 5 |
 
 > 📌 *Backlog em atualização contínua conforme evolução das sprints.*
 
