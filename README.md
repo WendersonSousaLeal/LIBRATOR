@@ -97,10 +97,11 @@ Facilitar a comunicação entre pessoas surdas e ouvintes por meio de um sistema
 
 | Sprint | Previsão | Status | Histórico |
 |:---:|:---:|:---:|:---:|
-| 01 | dd/mm/aaaa | 🔲 A fazer | [MVP](MVP/sp1.md) |
-| 02 | dd/mm/aaaa | 🔲 A fazer | [MVP](MVP/sp2.md) |
-| 03 | dd/mm/aaaa | 🔲 A fazer | [MVP](MVP/sp3.md) |
-| Feira de Soluções | dd/mm/aaaa | 🔲 A fazer | [MVP](#) |
+| 01 | 14/09/2026 a 27/09/2026 | 🔄 Em andamento | [Sprint 1: Planejamento & Fundamentação Teórica](MVP/sp1.md) |
+| 02 | 28/09/2026 a 11/10/2026 | 🔲 A fazer | [Sprint 2: Metodologia & Desenvolvimento Inicial](MVP/sp2.md) |
+| 03 | 12/10/2026 a 25/10/2026 | 🔲 A fazer | [Sprint 3: Execução Técnica & Resultados](MVP/sp3.md) |
+| 04 | 26/10/2026 a 08/11/2026 | 🔲 A fazer | [Sprint 4: Escrita, Formatação & Revisão ABNT](MVP/sp4.md) |
+| Feira de Soluções / Banca | 09/11/2026 a 22/11/2026 | 🔲 A fazer | [Sprint 5: Apresentação & Defesa Final](MVP/sp5.md) |
 
 ---
 
