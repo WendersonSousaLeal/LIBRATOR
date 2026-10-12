@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leitor de Libras</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #12141c;
+    --panel: #1a1d29;
+    --line: #2c3040;
+    --text: #eceef4;
+    --dim: #8a8fa3;
+    --amber: #e8a33d;
+    --teal: #4fd1c5;
+    --danger: #e2596b;
+  }
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Atkinson Hyperlegible', system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 20px 48px;
+  }
+
+  header, main, .transcript { width: 100%; max-width: 980px; }
+  header { margin-bottom: 22px; }
+  h1 { margin: 0; font-size: 26px; font-weight: 700; }
+  h1 span { color: var(--amber); }
+  .subtitle { color: var(--dim); font-size: 15px; margin: 6px 0 0; max-width: 560px; line-height: 1.5; }
+
+  main {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+
+  /* ---------- Câmera ---------- */
+  .viewfinder {
+    position: relative;
+    background: #000;
+    border-radius: 6px;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+  }
+  .viewfinder img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  /* ---------- Letra atual ---------- */
+  .readout {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+
+  .ring { position: relative; width: 190px; height: 190px; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 8; }
+  .ring .track { stroke: var(--line); }
+  .ring .bar {
+    stroke: var(--teal);
+    stroke-linecap: round;
+    stroke-dasharray: 502.65;      /* 2 * pi * 80 */
+    stroke-dashoffset: 502.65;
+    transition: stroke-dashoffset 0.12s linear, stroke 0.15s;
+  }
+  .ring.done .bar { stroke: var(--amber); }
+
+  .letter {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 96px;
+    font-weight: 700;
+    color: var(--amber);
+  }
+  .letter.idle { color: var(--dim); font-size: 48px; }
+
+  .meta { width: 100%; display: flex; flex-direction: column; gap: 10px; }
+  .confidence { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--dim); }
+  .confidence .track { flex: 1; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+  .confidence .fill { height: 100%; width: 0; background: var(--teal); transition: width 0.15s linear; }
+  .confidence .value { width: 40px; text-align: right; }
+
+  .status { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--dim); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--danger); flex-shrink: 0; }
+  .dot.on { background: var(--teal); box-shadow: 0 0 8px var(--teal); }
+
+  /* ---------- Frase ---------- */
+  .transcript {
+    margin-top: 20px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .transcript h2 {
+    margin: 0;
+    padding: 14px 22px 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--dim);
+  }
+  .page {
+    min-height: 190px;
+    padding: 12px 22px 22px;
+    font-size: 34px;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .page.empty::before {
+    content: 'Segure um sinal por 1 segundo para escrever a primeira letra.';
+    display: block;
+    color: var(--dim);
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+  .caret {
+    display: inline-block;
+    width: 3px;
+    height: 1em;
+    background: var(--amber);
+    vertical-align: text-bottom;
+    margin-left: 2px;
+    animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .caret { animation: none; } }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 14px 22px;
+    border-top: 1px solid var(--line);
+  }
+  button {
+    font: inherit;
+    font-size: 15px;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 9px 14px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--teal); }
+  button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  button kbd { color: var(--dim); font: inherit; font-size: 13px; margin-left: 8px; }
+  button.primary { border-color: var(--amber); color: var(--amber); }
+  .toolbar .spacer { flex: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Leitor de <span>Libras</span></h1>
+  <p class="subtitle">Faça o sinal diante da câmera e segure até o anel completar. A letra entra na frase.</p>
+</header>
+
+<main>
+  <div class="viewfinder">
+    <img src="{{ url_for('video_feed') }}" alt="Imagem da câmera com a mão detectada">
+  </div>
+
+  <div class="readout">
+    <div class="ring" id="ring">
+      <svg viewBox="0 0 180 180" aria-hidden="true">
+        <circle class="track" cx="90" cy="90" r="80"></circle>
+        <circle class="bar" id="bar" cx="90" cy="90" r="80"></circle>
+      </svg>
+      <div class="letter idle" id="letter">-</div>
+    </div>
+
+    <div class="meta">
+      <div class="confidence">
+        <span>Confiança</span>
+        <div class="track"><div class="fill" id="fill"></div></div>
+        <span class="value" id="confValue">0%</span>
+      </div>
+      <div class="status">
+        <div class="dot" id="dot"></div>
+        <span id="statusText">Aguardando a mão no quadro</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<section class="transcript" aria-label="Frase escrita">
+  <h2>Frase</h2>
+  <div class="page empty" id="page" aria-live="polite"><span id="typed"></span><span class="caret"></span></div>
+  <div class="toolbar">
+    <button data-action="space">Espaço<kbd>Espaço</kbd></button>
+    <button data-action="newline" class="primary">Nova linha<kbd>Enter</kbd></button>
+    <button data-action="backspace">Apagar letra<kbd>Backspace</kbd></button>
+    <span class="spacer"></span>
+    <button id="copyBtn">Copiar texto</button>
+    <button data-action="clear">Limpar tudo</button>
+  </div>
+</section>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const CIRC = 502.65;
+  let lastText = null;
+  let polling = false;
+
+  function renderText(text) {
+    if (text === lastText) return;
+    lastText = text;
+    $('typed').textContent = text;
+    $('page').classList.toggle('empty', text.length === 0);
+  }
+
+  async function sendCommand(action) {
+    try {
+      const res = await fetch('/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+      });
+      const data = await res.json();
+      if (data.text !== undefined) renderText(data.text);
+    } catch (err) {
+      $('statusText').textContent = 'Sem conexão com o servidor. Verifique se o app.py está rodando.';
+    }
+  }
+
+  document.querySelectorAll('button[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sendCommand(btn.dataset.action);
+      btn.blur();  // evita que a barra de espaço acione o botão de novo
+    });
+  });
+
+  $('copyBtn').addEventListener('click', async e => {
+    try {
+      await navigator.clipboard.writeText(lastText || '');
+      e.target.textContent = 'Texto copiado';
+      setTimeout(() => { e.target.textContent = 'Copiar texto'; }, 1500);
+    } catch (err) {
+      e.target.textContent = 'Não foi possível copiar';
+    }
+    e.target.blur();
+  });
+
+  document.addEventListener('keydown', e => {
+    const actions = { ' ': 'space', 'Enter': 'newline', 'Backspace': 'backspace' };
+    const action = actions[e.key];
+    if (!action) return;
+    e.preventDefault();
+    if (e.repeat && action !== 'backspace') return;
+    sendCommand(action);
+  });
+
+  async function poll() {
+    if (polling) return;
+    polling = true;
+    try {
+      const res = await fetch('/current_letter');
+      const d = await res.json();
+
+      const ring = $('ring'), letter = $('letter');
+      const progress = d.hand_visible ? (d.progress || 0) : 0;
+      $('bar').style.strokeDashoffset = CIRC * (1 - progress);
+      ring.classList.toggle('done', progress >= 1);
+
+      if (d.hand_visible && d.letter !== '-' && d.letter !== '?') {
+        letter.textContent = d.letter;
+        letter.classList.remove('idle');
+        $('dot').classList.add('on');
+        $('statusText').textContent = progress >= 1
+          ? 'Letra escrita. Troque de sinal ou tire a mão para repetir.'
+          : 'Segure o sinal...';
+      } else if (d.hand_visible) {
+        letter.textContent = '?';
+        letter.classList.add('idle');
+        $('dot').classList.add('on');
+        $('statusText').textContent = 'Mão detectada, mas o sinal não está claro';
+      } else {
+        letter.textContent = '-';
+        letter.classList.add('idle');
+        $('dot').classList.remove('on');
+        $('statusText').textContent = 'Aguardando a mão no quadro';
+      }
+
+      const pct = Math.round((d.confidence || 0) * 100);
+      $('fill').style.width = pct + '%';
+      $('confValue').textContent = pct + '%';
+      renderText(d.text || '');
+    } catch (err) {
+      $('statusText').textContent = 'Sem conexão com o servidor. Verifique se o app.py está rodando.';
+    } finally {
+      polling = false;
+    }
+  }
+
+  setInterval(poll, 120);
+  poll();
+</script>
+
+</body>
+</html>
