@@ -1,125 +1,109 @@
-<div align="center">
+# Leitor de Libras em Tempo Real
 
-# 🤟 Librator
-### Tradutor de Libras para Texto
+Sistema web para reconhecimento do alfabeto manual de Libras via webcam,
+usando MediaPipe (extração de landmarks da mão) + RandomForest (classificação)
++ Flask (interface web com streaming de vídeo).
 
-Um projeto pedagógico que une tecnologia e inclusão social.
+## Estrutura do projeto
 
-</div>
+```
+libras-recognizer/
+├── app.py                    # Servidor Flask (streaming + predição em tempo real)
+├── collect_data.py           # Script de coleta de dados via webcam
+├── train_model.py            # Script de treinamento do RandomForest
+├── hand_utils.py             # Módulo compartilhado: MediaPipe + normalização
+├── requirements.txt
+├── README.md
+├── data/
+│   └── landmarks_dataset.csv     (gerado por collect_data.py)
+├── models/
+│   ├── hand_landmarker.task      (baixado automaticamente na 1ª execução)
+│   └── libras_rf_model.pkl       (gerado por train_model.py)
+└── templates/
+    └── index.html             # Interface web (viewfinder + painel de leitura)
+```
 
----
+## Como o pipeline funciona
 
-## 📑 Índice
-- [Objetivo do Projeto](#-objetivo-do-projeto)
-- [Equipe](#-equipe)
-- [Tecnologias Utilizadas](#-tecnologias-utilizadas)
-- [Product Backlog](#-product-backlog)
-- [Competências Desenvolvidas](#-competências-desenvolvidas)
-- [Registro das Sprints](#-registro-das-sprints)
+1. **Captura**: o OpenCV lê os frames da webcam.
+2. **Extração**: o MediaPipe HandLandmarker detecta a mão e retorna 21
+   pontos (x, y, z) por frame.
+3. **Normalização** (`hand_utils.normalize_landmarks`): os pontos são
+   deslocados para que o pulso vire a origem (0,0,0) e depois escalados
+   pela distância pulso → base do dedo médio. Isso torna o reconhecimento
+   independente de onde a mão está na tela e de quão perto/longe da câmera
+   o usuário está. A orientação da mão é preservada de propósito, pois em
+   Libras ela é parte do significado do sinal.
+4. **Velocidade (opcional, ligado por padrão)**: para ajudar a reconhecer
+   as letras com movimento (H, J, K, X, Z), cada frame também guarda a
+   diferença entre a posição normalizada atual e a do frame anterior,
+   dobrando o vetor de features de 63 para 126 valores.
+5. **Classificação**: o vetor de features é passado para o
+   `RandomForestClassifier` treinado, que retorna a letra + a confiança.
+6. **Suavização**: a aplicação web faz uma votação por maioria entre as
+   últimas 8 predições antes de exibir uma letra, evitando "piscar" entre
+   letras erradas de frame a frame.
 
----
+## Guia de execução
 
-## 📖 Sobre o Projeto
+Veja o passo a passo detalhado abaixo (mesmos comandos, em ordem).
 
-O **Librator** é um projeto pedagógico que abrange áreas profissionais de diversos segmentos. Com foco no desenvolvimento de competências e fundamentado nos pilares da **inclusão** e da **resolução de problemas reais da sociedade**, a iniciativa visa aprimorar a comunicação e auxiliar o ensino em locais públicos e privados, oferecendo versatilidade para uso em diversas plataformas.
+```bash
+# 1. Criar e ativar um ambiente virtual
+python3 -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
 
-## 🎯 Objetivo do Projeto
+# 2. Instalar as dependências
+pip install -r requirements.txt
 
-Facilitar a comunicação entre pessoas surdas e ouvintes por meio de um sistema de tradução automática da Língua Brasileira de Sinais (Libras), utilizando visão computacional e aprendizado de máquina para converter sinais em texto de forma acessível e em tempo real.
+# 3. Coletar dados de treinamento (repita para cada letra do alfabeto)
+python collect_data.py
 
----
+# 4. Treinar o modelo com os dados coletados
+python train_model.py
 
-## 👥 Equipe
+# 5. Rodar a aplicação web
+python app.py
+# Acesse http://localhost:5000 no navegador
+```
 
-| Função | Nome | LinkedIn & GitHub |
-|:---:|:---|:---:|
-| Team Member | Wenderson Candido | [![Linkedin Badge](https://img.shields.io/badge/Linkedin-blue?style=flat-square&logo=Linkedin&logoColor=white)](https://www.linkedin.com/in/wendersonleal/) [![GitHub Badge](https://img.shields.io/badge/GitHub-111217?style=flat-square&logo=github&logoColor=white)](https://github.com/WendersonSousaLeal) |
-| Team Member | Samuel Domingos | [![Linkedin Badge](https://img.shields.io/badge/Linkedin-blue?style=flat-square&logo=Linkedin&logoColor=white)](https://www.linkedin.com/in/samuel-domingos-2265b3b6/) [![GitHub Badge](https://img.shields.io/badge/GitHub-111217?style=flat-square&logo=github&logoColor=white)](https://github.com/samueldomingos1) |
-| Team Member | Pedro Vieira | [![GitHub Badge](https://img.shields.io/badge/GitHub-111217?style=flat-square&logo=github&logoColor=white)](https://github.com/PedroVieirasj) |
-| Team Member | Pietro Oliveira | [![Linkedin Badge](https://img.shields.io/badge/Linkedin-blue?style=flat-square&logo=Linkedin&logoColor=white)](https://www.linkedin.com/in/pietro-oliveira-5551823b6/) [![GitHub Badge](https://img.shields.io/badge/GitHub-111217?style=flat-square&logo=github&logoColor=white)](https://github.com/Pietro18023) |
+## Dicas de otimização para letras com movimento/variação
 
----
+- **Features de velocidade**: já habilitadas por padrão em `hand_utils.py`
+  (`INCLUDE_VELOCITY = True`). Elas dão ao RandomForest um sinal direto de
+  "quanto e para onde" a mão se moveu entre dois frames, sem precisar
+  trocar para um modelo sequencial (LSTM/GRU) para capturar movimento.
+- **Coleta em modo contínuo**: para H, J, K, X e Z, use a tecla `C` em
+  `collect_data.py` e realize o gesto completo várias vezes - isso captura
+  a trajetória do movimento em várias amostras, não só a pose final.
+- **Não normalize a rotação**: letras como K/H/P ou G/Q têm configurações
+  de dedos parecidas e se diferenciam pela orientação da mão. Uma
+  normalização que remove rotação apagaria essa diferença.
+- **Suavização temporal na predição**: a votação por maioria em `app.py`
+  (`SMOOTHING_WINDOW`, `STABILITY_MIN_RATIO`) reduz o efeito de frames
+  ruidosos isolados durante o movimento.
+- **Limiar de confiança**: `CONFIDENCE_THRESHOLD` em `app.py` descarta
+  predições em que o modelo está pouco confiante, em vez de mostrar
+  qualquer palpite.
+- **Quantidade e diversidade de dados**: colete pelo menos 150-300 amostras
+  por letra, variando distância até a câmera, ângulo da mão, iluminação e,
+  se possível, mais de uma pessoa sinalizando. `train_model.py` avisa no
+  console quando alguma letra tem poucas amostras.
+- **class_weight="balanced"**: já usado em `train_model.py` para compensar
+  letras com menos amostras do que outras.
+- **Feature importance**: `train_model.py` imprime as 10 features mais
+  importantes após o treino - útil para verificar se o modelo está usando
+  landmarks que fazem sentido (ex.: ponta dos dedos) e não ruído.
+- **Limite do RandomForest**: ele classifica cada frame de forma
+  independente. Para sinais com movimento mais longo/complexo (além do
+  alfabeto manual, por exemplo palavras inteiras em Libras), o próximo
+  passo natural seria um modelo sequencial (ex.: LSTM sobre uma janela de
+  frames), mas isso sai do escopo do RandomForest.
 
-## 🛠 Tecnologias Utilizadas
+## Tratamento de "nenhuma mão visível"
 
-<div align="left">
-
-![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white)
-![OpenCV](https://img.shields.io/badge/OpenCV-5C3EE8?style=flat-square&logo=opencv&logoColor=white)
-![MediaPipe](https://img.shields.io/badge/MediaPipe-0097A7?style=flat-square&logo=google&logoColor=white)
-![Scikit--learn](https://img.shields.io/badge/scikit--learn-F7931E?style=flat-square&logo=scikit-learn&logoColor=white)
-![NumPy](https://img.shields.io/badge/NumPy-013243?style=flat-square&logo=numpy&logoColor=white)
-![Excel](https://img.shields.io/badge/Microsoft_Excel-217346?style=flat-square&logo=microsoft-excel&logoColor=white)
-![Jira](https://img.shields.io/badge/Jira_Software-0052CC?style=flat-square&logo=jira&logoColor=white)
-
-</div>
-
-| Categoria | Tecnologia | Uso no projeto |
-|---|---|---|
-| Linguagem | **Python** | Desenvolvimento principal do sistema |
-| Visão Computacional | **OpenCV** | Captura e processamento de imagens/vídeo |
-| Detecção de Mãos | **MediaPipe** | Rastreamento de pontos-chave (landmarks) das mãos |
-| Machine Learning | **Scikit-learn** | Treinamento do modelo de classificação |
-| Modelo | **MLPClassifier** | Classificação dos sinais em Libras |
-| Pré-processamento | **StandardScaler** | Normalização dos dados de entrada |
-| Persistência | **Joblib** | Salvamento e carregamento do modelo treinado |
-| Manipulação de dados | **NumPy** | Operações numéricas e vetoriais |
-| Gestão do Projeto | **Jira Software** | Organização das sprints e backlog |
-| Documentação | **Microsoft Excel** | Controle de dados e planilhas de apoio |
-
----
-
-## 📋 Product Backlog
-
-| Rank | Prioridade | User Story | Estimativa | Sprint |
-|:---:|:---:|:---|:---:|:---:|
-| 1 | 🔴 Alta | Pesquisa bibliográfica e mapeamento de dataset para LIBRAS | 5 | 1 |
-| 2 | 🔴 Alta | Detecção de mãos e pontos focais (visão computacional) | 8 | 1 |
-| 3 | 🔴 Alta | Estruturação preliminar da arquitetura do modelo de IA/Tradução | 5 | 1 |
-| 4 | 🟡 Média | Elaboração do documento base do TCC e capítulo de introdução | 3 | 1 |
-| 5 | 🔴 Alta | Treinamento do modelo para conversão automática de sinais em texto | 13 | 2 |
-| 6 | 🔴 Alta | Interface básica de captura de câmera e exibição da tradução | 5 | 2 |
-| 7 | 🟡 Média | Escrita do capítulo de Metodologia e Materiais/Métodos | 5 | 2 |
-| 8 | 🟡 Média | Testes de acurácia preliminares da interpretação dos gestos | 5 | 2 |
-| 9 | 🔴 Alta | Histórico das frases traduzidas e armazenamento local/nuvem | 5 | 3 |
-| 10 | 🟡 Média | Otimização de hiperparâmetros e redução de latência da IA | 8 | 3 |
-| 11 | 🟡 Média | Tabulação de métricas de desempenho (Acurácia, F1-Score) | 5 | 3 |
-| 12 | 🟢 Baixa | Exportação das transcrições do histórico em formato TXT/PDF | 3 | 3 |
-| 13 | 🔴 Alta | Redação do capítulo de Resultados, Discussão e Conclusão | 8 | 4 |
-| 14 | 🟡 Média | Adequação completa às normas ABNT/Institucionais | 5 | 4 |
-| 15 | 🟡 Média | Revisão ortográfica, gramatical e verificação de plágio | 3 | 4 |
-| 16 | 🔴 Alta | Elaboração dos slides de apresentação para a banca e Feira | 5 | 5 |
-| 17 | 🟡 Média | Preparação do ambiente de demonstração prática ao vivo (Live Demo) | 5 | 5 |
-| 18 | 🟢 Baixa | Criação de material gráfico/folders e brindes para a Feira de Soluções | 2 | 5 |
-
-> 📌 *Backlog em atualização contínua conforme evolução das sprints.*
-
----
-
-## 💡 Competências Desenvolvidas
-
-- Visão computacional aplicada à detecção e rastreamento de mãos
-- Treinamento e avaliação de modelos de classificação (Machine Learning)
-- Trabalho em equipe com metodologias ágeis (Scrum)
-- Organização e priorização de backlog de produto
-- Documentação técnica de projetos
-
----
-
-## 🗓 Registro das Sprints
-
-| Sprint | Previsão | Status | Histórico |
-|:---:|:---:|:---:|:---:|
-| 01 | 14/09/2026 a 27/09/2026 | 🔄 Em andamento | [Sprint 1: Planejamento & Fundamentação Teórica](MVP/sp1.md) |
-| 02 | 28/09/2026 a 11/10/2026 | 🔲 A fazer | [Sprint 2: Metodologia & Desenvolvimento Inicial](MVP/sp2.md) |
-| 03 | 12/10/2026 a 25/10/2026 | 🔲 A fazer | [Sprint 3: Execução Técnica & Resultados](MVP/sp3.md) |
-| 04 | 26/10/2026 a 08/11/2026 | 🔲 A fazer | [Sprint 4: Escrita, Formatação & Revisão ABNT](MVP/sp4.md) |
-| Feira de Soluções / Banca | 09/11/2026 a 22/11/2026 | 🔲 A fazer | [Sprint 5: Apresentação & Defesa Final](MVP/sp5.md) |
-
----
-
-<div align="center">
-
-Feito com 💙 pela equipe **Librator**
-
-</div>
+Tanto em `collect_data.py` (overlay "Nenhuma mao detectada" + amostras
+ignoradas) quanto em `app.py` (buffer de suavização é limpo e o painel
+mostra "Aguardando mão no quadro...") o sistema trata explicitamente a
+ausência de mão, em vez de tentar prever uma letra a partir de dados
+inexistentes.
