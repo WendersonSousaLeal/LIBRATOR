@@ -125,43 +125,39 @@ print(df["label"].value_counts().sort_index())
 Sempre que o dataset mudar, rode `train_model.py` de novo e reinicie o
 `app.py`: o modelo só é carregado na inicialização.
 
-## Comandos da interface
-
-<!-- Confirme as teclas/botões de acordo com o app.py e o index.html atuais -->
+## Comandos da interface e Atalhos
 
 | Ação | Como fazer | Resultado |
 |------|------------|-----------|
-| Formar letras | Faça o sinal e mantenha estável | A letra confirmada entra na palavra |
-| Dar espaço | `[tecla/botão de espaço]` | Separa uma palavra da outra |
-| Encerrar e ir para a linha de baixo | `[tecla/botão de nova linha]` | Fecha a palavra e começa uma nova linha |
+| **Formar letras** | Faça o sinal e segure por 1s | A letra confirmada entra na palavra |
+| **Autocompletar termo escolar** | Clique no chip preditivo ou `Alt + 1..4` | Preenche a palavra inteira da Etec/Fatec com espaço |
+| **Dar espaço** | Barra de espaço ou botão `␣ Espaço` | Separa uma palavra da outra |
+| **Apagar letra** | `Backspace` ou botão `⌫ Apagar` | Remove o último caractere digitado |
+| **Limpar campo** | Botão `🗑️ Limpar` | Zera a frase atual em construção |
+| **Ouvir Frase (Áudio/Voz)** | Botão `🔊 Ouvir Frase` | Síntese de voz em português (TTS) para o atendente |
+| **Enviar Mensagem** | `Enter` ou botão `🚀 Enviar Mensagem` | Envia a frase para o histórico de conversa com o atendente |
+| **Responder ao Aluno** | Digite no campo do atendente e dê `Enter` | Resposta em texto exibida na tela com visibilidade |
+| **Mural da Secretaria** | Clique em qualquer cartão do mural | Insere a solicitação oficial pronta na tela |
+| **Ajustar Câmera e IA** | Botão `⚙️ Configurações` | Troca de câmera em tempo real, ajuste de Hold Time e Confiança |
 
-## Usando o celular como câmera
+## Usando o celular como câmera (Iriun / DroidCam)
 
-Apps como Iriun Webcam e DroidCam criam uma câmera virtual no Windows. Para
-descobrir o índice dela:
-
-```bash
-python -c "import cv2; [print(i, cv2.VideoCapture(i, cv2.CAP_DSHOW).isOpened()) for i in range(4)]"
-```
-
-Troque o índice em `collect_data.py` e `app.py`:
-
-```python
-cv2.VideoCapture(2, cv2.CAP_DSHOW)   # use o índice que deu True
-```
-
-Use a mesma câmera, posição e rotação na coleta e no app.
+Com a versão atual do Librator, você **não precisa mais alterar o código-fonte** para mudar a câmera!
+1. Abra o app da câmera virtual (ex.: Iriun Webcam ou DroidCam).
+2. Acesse `http://localhost:5000` no navegador.
+3. Clique em **"⚙️ Configurações"** no topo da página e selecione o dispositivo desejado (Câmera 0, 1, 2 ou 3).
+4. O feed é atualizado automaticamente sem reiniciar o servidor!
 
 ## Onde editar
 
 | Quero mudar... | Arquivo | O quê |
 |----------------|---------|-------|
-| Sensibilidade da detecção | `app.py` | `CONFIDENCE_THRESHOLD`, `SMOOTHING_WINDOW`, `STABILITY_MIN_RATIO` |
+| Sensibilidade e parâmetros | `app.py` | `DEFAULT_CONFIDENCE_THRESHOLD`, `DEFAULT_HOLD_SECONDS`, `SMOOTHING_WINDOW` |
+| Vocabulário de autocompletar | `templates/index.html` | Constante `VOCABULARIO_CPS` |
+| Expressões da secretaria | `templates/index.html` | Objeto `EXPRESSOES_CPS` |
 | Features de movimento | `hand_utils.py` | `INCLUDE_VELOCITY` (True/False) |
-| Letras com movimento | `hand_utils.py` | `MOVEMENT_LETTERS` |
-| Parâmetros do modelo | `train_model.py` | bloco `RandomForestClassifier(...)` |
-| Visual da página | `templates/index.html` | CSS no `<style>` e JS no final |
-| Câmera usada | `app.py` e `collect_data.py` | índice do `cv2.VideoCapture` |
+| Parâmetros do modelo | `train_model.py` | Bloco `RandomForestClassifier(...)` |
+| Visual e estilo da interface | `templates/index.html` | CSS no `<style>` e elementos HTML |
 
 Se mudar `INCLUDE_VELOCITY`, apague o CSV, recolete tudo e treine de novo: o
 número de colunas muda (63 vs 126) e dados antigos ficam incompatíveis.
