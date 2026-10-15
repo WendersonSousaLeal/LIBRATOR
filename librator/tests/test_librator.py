@@ -97,3 +97,6 @@ if __name__ == "__main__":
     test_command_conclude_and_history()
     test_download_history()
     print("Todos os testes unitários foram executados e passaram com 100% de sucesso!")
+    import app as lib_app
+    lib_app.camera_thread.release()
+    sys.exit(0)
