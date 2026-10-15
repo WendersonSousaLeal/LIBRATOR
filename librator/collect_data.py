@@ -21,13 +21,18 @@ Uso:
 """
 
 import os
+import sys
 import csv
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 import cv2
 
 from hand_utils import HandTracker, draw_landmarks, feature_column_names, MOVEMENT_LETTERS
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+DATA_DIR = os.path.join(BASE_DIR, "data")
 CSV_PATH = os.path.join(DATA_DIR, "landmarks_dataset.csv")
 
 
@@ -37,11 +42,21 @@ def main():
 
     tracker = HandTracker()
 
-    cap = cv2.VideoCapture(2, cv2.CAP_DSHOW)
-    if not cap.isOpened():
+    target_idx = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else None
+    cap = None
+    candidates = [target_idx] if target_idx is not None else [0, 1, 2, 3]
+    for idx in candidates:
+        c = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+        if c.isOpened():
+            cap = c
+            print(f"[collect_data] Câmera conectada com sucesso no índice {idx}.")
+            break
+        c.release()
+
+    if cap is None or not cap.isOpened():
         raise RuntimeError(
-            "Não foi possível acessar a webcam (índice 0). Verifique se ela está "
-            "conectada e se nenhum outro programa está usando-a."
+            "Não foi possível acessar nenhuma webcam conectada. Verifique se a câmera está "
+            "conectada ou se outro aplicativo está usando-a."
         )
 
     current_label = None
