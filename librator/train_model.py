@@ -28,7 +28,7 @@ from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.preprocessing import LabelEncoder
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_PATH = os.path.join(BASE_DIR, "data", "landmarks_dataset_2.csv")
+DATA_PATH = os.path.join(BASE_DIR, "data", "landmarks_dataset.csv")
 MODEL_OUT_PATH = os.path.join(BASE_DIR, "models", "libras_rf_model.pkl")
 
 MIN_SAMPLES_PER_LETTER = 60  # aviso caso alguma letra tenha poucas amostras
