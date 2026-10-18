@@ -619,6 +619,78 @@
     margin-top: 6px;
     line-height: 1.3;
   }
+
+  /* ---------- Abas ---------- */
+  #tab-libras, #tab-texto { width: 100%; max-width: 980px; }
+  .tabs {
+    width: 100%;
+    max-width: 980px;
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .tab-btn {
+    font: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--dim);
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 10px 18px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--amber); border-bottom-color: var(--amber); }
+  .tab-btn:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  /* ---------- Aba Texto -> Libras ---------- */
+  .text-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .text-card .card-body { padding: 14px 22px 18px; }
+  .text-card textarea {
+    width: 100%;
+    min-height: 110px;
+    resize: vertical;
+    background: #0f1219;
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font: inherit;
+    font-size: 18px;
+    line-height: 1.4;
+  }
+  .text-card textarea:focus { outline: 2px solid var(--teal); }
+  .sign-output {
+    min-height: 85px;
+    padding: 16px 22px;
+    font-size: 34px;
+    font-weight: 700;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    color: var(--amber);
+    cursor: pointer;
+  }
+  .sign-output.empty { color: var(--dim); font-size: 16px; font-weight: 400; cursor: default; }
+  .how-to {
+    margin: 0;
+    padding: 14px 22px;
+    border-top: 1px solid var(--line);
+    color: var(--dim);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .how-to strong { color: var(--text); }
 </style>
 </head>
 <body>
@@ -636,6 +708,14 @@
     <span>🤟</span> Guia do Alfabeto
   </button>
 </header>
+
+<!-- Abas -->
+<nav class="tabs" role="tablist" aria-label="Modo de tradução">
+  <button class="tab-btn active" role="tab" id="tabBtnLibras" aria-selected="true" aria-controls="tab-libras">🤟 Libras → Texto</button>
+  <button class="tab-btn" role="tab" id="tabBtnTexto" aria-selected="false" aria-controls="tab-texto">⌨️ Texto → Libras</button>
+</nav>
+
+<div id="tab-libras" role="tabpanel">
 
 <!-- Main Grid: Câmera + Painel da Letra Atual -->
 <main>
@@ -742,6 +822,52 @@
   </div>
 </section>
 
+</div><!-- /tab-libras -->
+
+<!-- ================= Aba 2: Texto -> Libras (VLibras) ================= -->
+<div id="tab-texto" role="tabpanel" hidden>
+
+  <section class="text-card" aria-label="Digite o texto">
+    <div class="card-header-row">
+      <h2>Texto para traduzir</h2>
+      <span class="badge-realtime">VLIBRAS</span>
+    </div>
+    <div class="card-body">
+      <textarea id="inputText" placeholder="Digite aqui o que você quer ver em Libras..." maxlength="500"></textarea>
+    </div>
+    <div class="toolbar">
+      <button class="action-btn primary" id="btnTranslateText">🤟 Traduzir para Libras</button>
+      <button class="action-btn" id="btnUseSentence">↩ Usar a frase da aba Libras → Texto</button>
+      <span class="spacer"></span>
+      <button class="action-btn danger" id="btnClearText">Limpar</button>
+    </div>
+  </section>
+
+  <section class="text-card" aria-label="Texto para o avatar">
+    <div class="card-header-row">
+      <h2>Texto que o avatar vai sinalizar</h2>
+    </div>
+    <div class="sign-output empty" id="signOutput">O texto traduzido aparece aqui.</div>
+    <div class="toolbar">
+      <button class="action-btn primary" id="btnReplaySign">▶ Sinalizar novamente</button>
+    </div>
+    <p class="how-to">
+      <strong>Como ver o sinal:</strong> o avatar do VLibras abre sozinho nesta aba e sinaliza o texto assim que você clica em
+      <em>Traduzir para Libras</em>. Use <em>Sinalizar novamente</em> para repetir. Se o avatar não reagir, clique no
+      texto acima. Se a janelinha for fechada, use o botão das mãozinhas (lado direito da tela). Precisa de internet.
+    </p>
+  </section>
+
+</div><!-- /tab-texto -->
+
+<!-- Widget oficial do VLibras (governo federal) -->
+<div vw class="enabled" id="vlibrasBox" hidden>
+  <div vw-access-button class="active"></div>
+  <div vw-plugin-wrapper>
+    <div class="vw-plugin-top-wrapper"></div>
+  </div>
+</div>
+
 <!-- Modal: Guia do Alfabeto Manual -->
 <div class="modal-overlay" id="guideModal">
   <div class="modal-window">
@@ -765,6 +891,7 @@
   let useBrowserCamera = false;
   let browserStream = null;
   let clientProcessInterval = null;
+  let activeTab = 'libras';
 
   // Vocabulário de apoio
   const VOCABULARIO_SUGESTOES = [
@@ -975,7 +1102,7 @@
     ring.classList.toggle('done', progress >= 1.0);
 
     // Espaço mãos-livres
-    if ($('chkHandsFreeSpace').checked) {
+    if ($('chkHandsFreeSpace').checked && activeTab === 'libras') {
       if (handWasVisible && !isVisible) {
         if (!handLostTimer) {
           handLostTimer = setTimeout(() => {
@@ -1096,6 +1223,10 @@
   });
 
   document.addEventListener('keydown', e => {
+    // Na aba Texto -> Libras (ou dentro de campos de texto) as teclas funcionam normalmente
+    if (activeTab !== 'libras') return;
+    const t = e.target.tagName;
+    if (t === 'TEXTAREA' || t === 'INPUT' || t === 'SELECT') return;
     const map = { ' ': 'space', 'Enter': 'conclude', 'Backspace': 'backspace' };
     const act = map[e.key];
     if (!act) return;
@@ -1103,6 +1234,110 @@
     if (e.repeat && act !== 'backspace') return;
     sendCommand(act);
   });
+
+  // ---------- Abas ----------
+  function setTab(name) {
+    activeTab = name;
+    const isLibras = name === 'libras';
+    $('tab-libras').hidden = !isLibras;
+    $('tab-texto').hidden = isLibras;
+    $('tabBtnLibras').classList.toggle('active', isLibras);
+    $('tabBtnTexto').classList.toggle('active', !isLibras);
+    $('tabBtnLibras').setAttribute('aria-selected', isLibras);
+    $('tabBtnTexto').setAttribute('aria-selected', !isLibras);
+    $('vlibrasBox').hidden = isLibras;
+    if (!isLibras) { $('inputText').focus(); openVLibras(); }
+  }
+  $('tabBtnLibras').addEventListener('click', () => setTab('libras'));
+  $('tabBtnTexto').addEventListener('click', () => setTab('texto'));
+
+  // ---------- Texto -> Libras (VLibras) ----------
+  function showSignText(autoSign = true) {
+    const txt = $('inputText').value.trim();
+    const out = $('signOutput');
+    if (!txt) {
+      out.textContent = 'O texto traduzido aparece aqui.';
+      out.classList.add('empty');
+      return;
+    }
+    out.textContent = txt;
+    out.classList.remove('empty');
+    if (autoSign) {
+      openVLibras();                                   // garante a janelinha aberta
+      setTimeout(signNow, vlibrasOpened ? 150 : 1800); // espera o avatar carregar na 1ª vez
+    }
+  }
+
+  // Manda o texto para o avatar sinalizar, sem precisar clicar
+  function signNow() {
+    const out = $('signOutput');
+    if (out.classList.contains('empty')) return;
+    const txt = out.textContent.trim();
+    if (!txt) return;
+
+    // 1) Se o plugin expõe a função de tradução, usa direto
+    const pl = window.plugin;
+    try {
+      if (pl && typeof pl.translate === 'function') { pl.translate(txt); return; }
+      if (pl && pl.player && typeof pl.player.translate === 'function') { pl.player.translate(txt); return; }
+    } catch (e) { console.warn('VLibras translate falhou, tentando por clique:', e); }
+
+    // 2) Senão, simula o que o usuário faria: selecionar o texto e clicar nele
+    const range = document.createRange();
+    range.selectNodeContents(out);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    ['mousedown', 'mouseup', 'click'].forEach(type =>
+      out.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window }))
+    );
+  }
+  $('btnReplaySign').addEventListener('click', () => { signNow(); $('btnReplaySign').blur(); });
+  $('btnTranslateText').addEventListener('click', () => showSignText(true));
+  $('inputText').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); showSignText(true); }
+  });
+  $('btnUseSentence').addEventListener('click', () => {
+    $('inputText').value = (lastText || '').trim();
+    showSignText(true);
+  });
+  $('btnClearText').addEventListener('click', () => {
+    $('inputText').value = '';
+    showSignText(false);
+    $('inputText').focus();
+  });
+
+  // ---------- VLibras ----------
+  let vlibrasReady = false;
+  let vlibrasOpened = false;
+
+  // Abre a janelinha do avatar sozinha (equivale a clicar no botão das mãozinhas)
+  function openVLibras(tries = 0) {
+    if (vlibrasOpened || activeTab !== 'texto') return;
+    const btn = document.querySelector('[vw-access-button]');
+    if (vlibrasReady && btn) {
+      btn.click();
+      vlibrasOpened = true;
+      return;
+    }
+    if (tries < 40) setTimeout(() => openVLibras(tries + 1), 300);
+  }
+  function loadVLibras() {
+    const s = document.createElement('script');
+    s.src = 'https://vlibras.gov.br/app/vlibras-plugin.js';
+    s.onload = () => {
+      if (window.VLibras) {
+        new window.VLibras.Widget('https://vlibras.gov.br/app');
+        setTimeout(() => { vlibrasReady = true; if (activeTab === 'texto') openVLibras(); }, 800);
+      }
+    };
+    s.onerror = () => {
+      $('signOutput').insertAdjacentHTML('afterend',
+        '<p class="how-to" style="color:var(--danger)">Não foi possível carregar o VLibras. Verifique a conexão com a internet.</p>');
+    };
+    document.body.appendChild(s);
+  }
+  window.addEventListener('load', loadVLibras);
 
   initGuide();
   setInterval(poll, 120);
