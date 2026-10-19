@@ -115,9 +115,14 @@ def main():
                 samples_this_label = 0
                 print(f"Letra selecionada: {current_label}")
 
+            elif ord("0") <= key <= ord("9"):
+                current_label = chr(key)
+                samples_this_label = 0
+                print(f"Número selecionado: {current_label}")
+
             elif key == 32:  # barra de espaço
                 if current_label is None:
-                    print("Selecione uma letra (A-Z) antes de gravar uma amostra.")
+                    print("Selecione uma letra (A-Z) ou número (0-9) antes de gravar uma amostra.")
                 elif feature_vector is None:
                     print("Nenhuma mão detectada - amostra ignorada.")
                 else:

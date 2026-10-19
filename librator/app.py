@@ -23,6 +23,7 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from hand_utils import HandTracker, draw_landmarks
+from number_recognizer import LibrasNumberRecognizer
 
 MODEL_PATH = os.path.join(BASE_DIR, "models", "libras_rf_model.pkl")
 
@@ -45,6 +46,7 @@ bundle = joblib.load(MODEL_PATH)
 model = bundle["model"]
 label_encoder = bundle["label_encoder"]
 tracker = HandTracker()
+number_recognizer = LibrasNumberRecognizer()
 
 # --- Gerenciador de Câmera em Thread Dedicada (Zero Latência e Não-Bloqueante) ---
 class CameraThread:
@@ -160,9 +162,14 @@ text_buffer = ""
 phrase_history = []
 history_counter = 1
 
+current_mode = "letters"  # "letters", "numbers", "hybrid"
+AVAILABLE_MODES = ["letters", "numbers", "hybrid"]
+
 prediction_buffer = deque(maxlen=SMOOTHING_WINDOW)
 current_state = {
     "letter": "-",
+    "symbol": "-",
+    "mode": current_mode,
     "confidence": 0.0,
     "hand_visible": False,
     "progress": 0.0,
@@ -181,6 +188,31 @@ def predict_letter(feature_vector: np.ndarray):
 
     letter = label_encoder.inverse_transform([best_idx])[0]
     return letter, confidence
+
+
+def predict_symbol(feature_vector: np.ndarray, raw_landmarks):
+    """
+    Retorna (símbolo, confiança) dependendo do modo ativo:
+      - "letters": usa o modelo de alfabeto A-Z
+      - "numbers": usa o reconhecedor cinemático / ML de números 0-9
+      - "hybrid": avalia ambos e seleciona o mais provável
+    """
+    global current_mode
+    if current_mode == "numbers":
+        num, conf, _ = number_recognizer.predict(raw_landmarks, feature_vector)
+        if conf < CONFIDENCE_THRESHOLD:
+            return None, conf
+        return num, conf
+
+    elif current_mode == "hybrid":
+        num, num_conf, _ = number_recognizer.predict(raw_landmarks, feature_vector)
+        let, let_conf = predict_letter(feature_vector)
+        if num is not None and num_conf >= (let_conf or 0.0):
+            return num, num_conf
+        return let, let_conf
+
+    else:  # "letters"
+        return predict_letter(feature_vector)
 
 
 def update_hold(candidate, hand_visible):
@@ -215,7 +247,7 @@ def update_hold(candidate, hand_visible):
 
 def apply_command(action, payload=None):
     """Aplica comandos de edição e gerenciamento do histórico."""
-    global text_buffer, history_counter
+    global text_buffer, history_counter, current_mode
     payload = payload or {}
 
     with state_lock:
@@ -264,17 +296,32 @@ def apply_command(action, payload=None):
             if idx_str.isdigit():
                 camera_thread.switch_camera(int(idx_str))
 
+        elif action == "set_mode":
+            mode_req = payload.get("mode")
+            if mode_req in AVAILABLE_MODES:
+                current_mode = mode_req
+                prediction_buffer.clear()
+                update_hold(None, False)
+
+        elif action == "toggle_mode":
+            idx = AVAILABLE_MODES.index(current_mode) if current_mode in AVAILABLE_MODES else 0
+            current_mode = AVAILABLE_MODES[(idx + 1) % len(AVAILABLE_MODES)]
+            prediction_buffer.clear()
+            update_hold(None, False)
+
         else:
             return None
 
         return {
             "text": text_buffer,
-            "history": list(phrase_history)
+            "history": list(phrase_history),
+            "mode": current_mode,
+            "available_modes": AVAILABLE_MODES
         }
 
 
 def process_single_frame(frame):
-    """Processa um frame de vídeo através do MediaPipe e do RandomForest."""
+    """Processa um frame de vídeo através do MediaPipe e do classificador ativo."""
     global current_state
 
     feature_vector, raw_landmarks = tracker.process(frame)
@@ -285,25 +332,29 @@ def process_single_frame(frame):
         update_hold(None, False)
         current_state = {
             "letter": "-",
+            "symbol": "-",
+            "mode": current_mode,
             "confidence": 0.0,
             "hand_visible": False,
             "progress": 0.0
         }
         return current_state, None
     else:
-        letter, confidence = predict_letter(feature_vector)
-        if letter is not None:
-            prediction_buffer.append(letter)
+        symbol, confidence = predict_symbol(feature_vector, raw_landmarks)
+        if symbol is not None:
+            prediction_buffer.append(symbol)
 
         candidate = None
-        if letter is not None and prediction_buffer:
-            voted_letter, votes = Counter(prediction_buffer).most_common(1)[0]
+        if symbol is not None and prediction_buffer:
+            voted_symbol, votes = Counter(prediction_buffer).most_common(1)[0]
             if votes / len(prediction_buffer) >= STABILITY_MIN_RATIO:
-                candidate = voted_letter
+                candidate = voted_symbol
 
         progress = update_hold(candidate, True)
         current_state = {
             "letter": candidate if candidate else "?",
+            "symbol": candidate if candidate else "?",
+            "mode": current_mode,
             "confidence": confidence,
             "hand_visible": True,
             "progress": progress
@@ -344,13 +395,15 @@ def generate_frames():
         else:
             draw_landmarks(frame, raw_landmarks)
             # Overlay visual superior esquerdo
-            cv2.rectangle(frame, (10, 10), (280, 75), (0, 0, 0), -1)
-            cv2.putText(frame, state["letter"], (20, 60),
+            cv2.rectangle(frame, (10, 10), (320, 75), (0, 0, 0), -1)
+            cv2.putText(frame, state.get("symbol", state.get("letter", "-")), (20, 60),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.6, (0, 255, 0), 3)
-            cv2.putText(frame, f"{state['confidence'] * 100:.0f}%", (120, 60),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+            cv2.putText(frame, f"{state['confidence'] * 100:.0f}%", (100, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            cv2.putText(frame, f"[{state.get('mode', 'letters').upper()}]", (170, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (79, 209, 197), 1)
             if state["progress"] > 0:
-                cv2.rectangle(frame, (10, 75), (10 + int(270 * state["progress"]), 80), (0, 220, 0), -1)
+                cv2.rectangle(frame, (10, 75), (10 + int(310 * state["progress"]), 80), (0, 220, 0), -1)
 
         ok, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         if not ok:
@@ -374,14 +427,17 @@ def video_feed():
 
 @app.route("/current_letter")
 def current_letter():
-    """Estado em tempo real da letra, progresso e frase atual."""
+    """Estado em tempo real da letra/número, progresso e frase atual."""
     with state_lock:
         text = text_buffer
         hist = list(phrase_history)
+        mode = current_mode
     return jsonify({
         **current_state,
         "text": text,
         "history": hist,
+        "mode": mode,
+        "available_modes": AVAILABLE_MODES,
         "camera_index": camera_thread.index,
         "camera_opened": camera_thread.is_opened
     })
