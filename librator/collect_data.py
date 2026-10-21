@@ -28,6 +28,7 @@ Uso:
 import os
 import sys
 import csv
+import time
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
@@ -68,6 +69,13 @@ def main():
     continuous_mode = False
     samples_this_label = 0
 
+    # --- Contador de FPS ---
+    # fps_suave: média móvel exibida na tela (menos "tremida" que o valor bruto).
+    # fps_lista: valores brutos de todos os frames, para a média final.
+    fps_suave = 0.0
+    fps_lista = []
+    t_anterior = time.perf_counter()
+
     print("=== Coleta de Dados - Alfabeto Manual de Libras ===")
     print("A-Z: letra | 0-9: número | ESPAÇO: grava 1 amostra | ENTER: modo contínuo | ESC: sair\n")
 
@@ -92,6 +100,15 @@ def main():
             if hand_visible:
                 draw_landmarks(frame, raw_landmarks)
 
+            # --- Cálculo do FPS (captura + MediaPipe + desenho) ---
+            t_atual = time.perf_counter()
+            dt = t_atual - t_anterior
+            t_anterior = t_atual
+            if dt > 0:
+                fps_inst = 1.0 / dt
+                fps_lista.append(fps_inst)
+                fps_suave = fps_inst if fps_suave == 0.0 else 0.9 * fps_suave + 0.1 * fps_inst
+
             # --- Overlay de status na tela ---
             tipo = "Numero" if (current_label and current_label.isdigit()) else "Letra"
             cv2.putText(frame, f"{tipo} atual: {current_label or '-'}  |  Amostras: {samples_this_label}",
@@ -106,6 +123,9 @@ def main():
             if not hand_visible:
                 cv2.putText(frame, "Nenhuma mao detectada", (10, 120),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+            cv2.putText(frame, f"FPS: {fps_suave:.1f}", (frame.shape[1] - 130, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
             cv2.imshow("Coleta de Dados - Libras (ESC para sair)", frame)
             key = cv2.waitKey(1) & 0xFF
@@ -142,6 +162,11 @@ def main():
     cv2.destroyAllWindows()
     tracker.close()
     print(f"\nColeta finalizada. Dados salvos em: {CSV_PATH}")
+    if fps_lista:
+        # descarta os primeiros frames (inicialização da câmera/MediaPipe) para uma média mais fiel
+        estavel = fps_lista[30:] if len(fps_lista) > 60 else fps_lista
+        print(f"FPS médio: {sum(estavel) / len(estavel):.1f} "
+              f"(mín: {min(estavel):.1f} | máx: {max(estavel):.1f}) em {len(fps_lista)} frames")
 
 
 if __name__ == "__main__":
