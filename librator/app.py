@@ -27,11 +27,12 @@ from hand_utils import HandTracker, draw_landmarks
 MODEL_PATH = os.path.join(BASE_DIR, "models", "libras_rf_model.pkl")
 
 # --- Configurações Padrão ---
-CAMERA_INDEX = 0
+CAMERA_INDEX = 2
 CONFIDENCE_THRESHOLD = 0.65
 SMOOTHING_WINDOW = 8
 STABILITY_MIN_RATIO = 0.5
 HOLD_SECONDS = 1.0
+MODE_MIN_MASS = 0.25   # probabilidade mínima que o grupo do modo (letras/números) precisa ter
 
 app = Flask(__name__)
 
@@ -45,6 +46,24 @@ bundle = joblib.load(MODEL_PATH)
 model = bundle["model"]
 label_encoder = bundle["label_encoder"]
 tracker = HandTracker()
+
+# --- Modos: LETRAS (A-Z) e NÚMEROS (0-9) ---
+# O mesmo modelo guarda as duas famílias de sinais. Em cada modo, só as classes
+# daquele grupo são consideradas, o que evita confundir, por exemplo, V com 2 ou O com 0.
+CLASS_NAMES = [str(c) for c in label_encoder.classes_]
+LETTER_MASK = np.array([len(c) == 1 and c.isalpha() for c in CLASS_NAMES], dtype=float)
+NUMBER_MASK = np.array([len(c) == 1 and c.isdigit() for c in CLASS_NAMES], dtype=float)
+current_mode = "letters"
+
+
+def mode_mask(mode):
+    return NUMBER_MASK if mode == "numbers" else LETTER_MASK
+
+
+def mode_ready(mode):
+    """True se o modelo tem classes treinadas para o modo."""
+    return bool(mode_mask(mode).sum() > 0)
+
 
 # --- Gerenciador de Câmera em Thread Dedicada (Zero Latência e Não-Bloqueante) ---
 class CameraThread:
@@ -78,7 +97,17 @@ class CameraThread:
             # Fallback para backend padrão
             cap = cv2.VideoCapture(idx)
 
+        # Só vale se a câmera realmente entregar imagem (tenta por ~1 s)
+        works = False
         if cap.isOpened():
+            for _ in range(10):
+                ok, _frame = cap.read()
+                if ok and _frame is not None:
+                    works = True
+                    break
+                time.sleep(0.1)
+
+        if works:
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             cap.set(cv2.CAP_PROP_FPS, 30)
@@ -87,11 +116,15 @@ class CameraThread:
             self.is_opened = True
             print(f"[CameraThread] Câmera no índice {idx} conectada com sucesso!")
             return True
-        else:
-            self.cap = None
-            self.is_opened = False
-            print(f"[CameraThread] Não foi possível abrir o índice {idx}.")
-            return False
+
+        try:
+            cap.release()
+        except Exception:
+            pass
+        self.cap = None
+        self.is_opened = False
+        print(f"[CameraThread] Câmera no índice {idx} não entregou imagem.")
+        return False
 
     def switch_camera(self, new_index):
         with self.lock:
@@ -108,8 +141,8 @@ class CameraThread:
         # Tenta o índice inicial
         opened = self._open_device(self.index)
         if not opened:
-            # Tenta auto-scan dos outros índices
-            for fallback_idx in [0, 1, 2, 3]:
+            # Tenta auto-scan dos outros índices (o 0 fica por último)
+            for fallback_idx in [2, 3, 1, 0]:
                 if fallback_idx != self.index:
                     if self._open_device(fallback_idx):
                         break
@@ -173,14 +206,22 @@ hold = {"letter": None, "start": 0.0, "locked": False}
 def predict_letter(feature_vector: np.ndarray):
     """Retorna (letra, confiança). Abaixo do limiar, a letra é None."""
     probs = model.predict_proba([feature_vector])[0]
-    best_idx = int(np.argmax(probs))
-    confidence = float(probs[best_idx])
+    masked = probs * mode_mask(current_mode)   # só as classes do modo atual
+    total = float(masked.sum())
+
+    # O modelo não tem esse grupo treinado, ou o sinal não parece nada deste modo
+    if total < MODE_MIN_MASS:
+        return None, float(masked.max()) if masked.size else 0.0
+
+    masked = masked / total
+    best_idx = int(np.argmax(masked))
+    confidence = float(masked[best_idx])
 
     if confidence < CONFIDENCE_THRESHOLD:
         return None, confidence
 
-    letter = label_encoder.inverse_transform([best_idx])[0]
-    return letter, confidence
+    symbol = str(label_encoder.inverse_transform([best_idx])[0])
+    return symbol, confidence
 
 
 def update_hold(candidate, hand_visible):
@@ -215,7 +256,7 @@ def update_hold(candidate, hand_visible):
 
 def apply_command(action, payload=None):
     """Aplica comandos de edição e gerenciamento do histórico."""
-    global text_buffer, history_counter
+    global text_buffer, history_counter, current_mode
     payload = payload or {}
 
     with state_lock:
@@ -259,6 +300,13 @@ def apply_command(action, payload=None):
         elif action == "clear_history":
             phrase_history.clear()
 
+        elif action == "set_mode":
+            mode = payload.get("mode")
+            if mode in ("letters", "numbers"):
+                current_mode = mode
+                prediction_buffer.clear()
+                hold.update(letter=None, locked=False)
+
         elif action == "set_camera":
             idx_str = str(payload.get("index", "0"))
             if idx_str.isdigit():
@@ -269,7 +317,8 @@ def apply_command(action, payload=None):
 
         return {
             "text": text_buffer,
-            "history": list(phrase_history)
+            "history": list(phrase_history),
+            "mode": current_mode
         }
 
 
@@ -382,6 +431,8 @@ def current_letter():
         **current_state,
         "text": text,
         "history": hist,
+        "mode": current_mode,
+        "mode_ready": mode_ready(current_mode),
         "camera_index": camera_thread.index,
         "camera_opened": camera_thread.is_opened
     })
@@ -412,7 +463,9 @@ def process_client_frame():
         return jsonify({
             **state,
             "text": text,
-            "history": hist
+            "history": hist,
+            "mode": current_mode,
+            "mode_ready": mode_ready(current_mode)
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500

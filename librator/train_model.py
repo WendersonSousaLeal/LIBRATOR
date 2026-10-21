@@ -40,7 +40,7 @@ def load_dataset(path: str) -> pd.DataFrame:
             f"Dataset não encontrado em '{path}'. Rode collect_data.py primeiro "
             "para gerar os dados de treinamento."
         )
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, dtype={"label": str})
     if df.empty:
         raise ValueError("O arquivo de dataset está vazio.")
     

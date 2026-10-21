@@ -9,12 +9,17 @@ linha no CSV de dataset contendo: [label, feature_0, feature_1, ...].
 
 CONTROLES (com a janela da webcam em foco):
     A-Z         -> seleciona a letra atual que está sendo gravada
+    0-9         -> seleciona o NÚMERO atual que está sendo gravado
     [ESPAÇO]    -> grava UMA amostra (frame atual) da letra selecionada
-    [C]         -> alterna o modo de gravação CONTÍNUA (grava a cada
+    [ENTER]     -> alterna o modo de gravação CONTÍNUA (grava a cada
                    frame processado). Recomendado para as letras com
                    movimento: H, J, K, X, Z - faça o gesto completo
                    várias vezes com o modo contínuo ativo.
     [ESC]       -> encerra a coleta e fecha a janela
+
+    Obs.: ao trocar de letra ou número, o modo contínuo desliga sozinho. Aperte
+    [ENTER] de novo para voltar a gravar o novo sinal.
+    (A tecla [1] agora escolhe o número 1, por isso o modo contínuo usa ENTER.)
 
 Uso:
     python collect_data.py
@@ -64,7 +69,7 @@ def main():
     samples_this_label = 0
 
     print("=== Coleta de Dados - Alfabeto Manual de Libras ===")
-    print("A-Z: seleciona a letra | ESPAÇO: grava 1 amostra | C: modo contínuo | ESC: sair\n")
+    print("A-Z: letra | 0-9: número | ESPAÇO: grava 1 amostra | ENTER: modo contínuo | ESC: sair\n")
 
     # Abre o CSV em modo "append" - permite rodar o script várias vezes
     # (em sessões diferentes, com iluminação/ângulos diferentes) sem
@@ -88,9 +93,10 @@ def main():
                 draw_landmarks(frame, raw_landmarks)
 
             # --- Overlay de status na tela ---
-            cv2.putText(frame, f"Letra atual: {current_label or '-'}  |  Amostras: {samples_this_label}",
+            tipo = "Numero" if (current_label and current_label.isdigit()) else "Letra"
+            cv2.putText(frame, f"{tipo} atual: {current_label or '-'}  |  Amostras: {samples_this_label}",
                         (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            cv2.putText(frame, "Modo: CONTINUO" if continuous_mode else "Modo: MANUAL (ESPACO p/ gravar)",
+            cv2.putText(frame, "Modo: CONTINUO (ENTER p/ parar)" if continuous_mode else "Modo: MANUAL (ESPACO grava | ENTER = continuo)",
                         (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
 
             if current_label in MOVEMENT_LETTERS:
@@ -107,17 +113,19 @@ def main():
             if key == 27:  # ESC
                 break
 
-            elif key in (ord("c"), ord("C")):
+            elif key == 13:  # ENTER
                 continuous_mode = not continuous_mode
 
-            elif ord("a") <= key <= ord("z"):
-                current_label = chr(key).upper()
+            elif ord("a") <= key <= ord("z") or ord("0") <= key <= ord("9"):
+                current_label = chr(key).upper()   # letras viram maiúsculas; números ficam como estão
                 samples_this_label = 0
-                print(f"Letra selecionada: {current_label}")
+                continuous_mode = False  # trocar de sinal desliga o modo contínuo
+                tipo_sel = "Número" if current_label.isdigit() else "Letra"
+                print(f"{tipo_sel} selecionado: {current_label} (modo contínuo desligado; aperte ENTER para ligar)")
 
             elif key == 32:  # barra de espaço
                 if current_label is None:
-                    print("Selecione uma letra (A-Z) antes de gravar uma amostra.")
+                    print("Selecione uma letra (A-Z) ou um número (0-9) antes de gravar uma amostra.")
                 elif feature_vector is None:
                     print("Nenhuma mão detectada - amostra ignorada.")
                 else:

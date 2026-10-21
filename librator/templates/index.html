@@ -620,6 +620,47 @@
     line-height: 1.3;
   }
 
+  /* ---------- Letras / Números ---------- */
+  .mode-switch {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .mode-btn {
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--dim);
+    background: #0f1219;
+    border: none;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mode-btn + .mode-btn { border-left: 1px solid var(--line); }
+  .mode-btn:hover { color: var(--text); }
+  .mode-btn.active { background: var(--amber); color: #1a1208; }
+  .mode-btn:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+  .mode-hint {
+    flex-basis: 100%;
+    font-size: 13px;
+    color: var(--amber);
+  }
+  .guide-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .guide-tab {
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--dim);
+    background: #0f1219;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 7px 16px;
+    cursor: pointer;
+  }
+  .guide-tab.active { color: var(--amber); border-color: var(--amber); }
+
   /* ---------- Abas ---------- */
   #tab-libras, #tab-texto { width: 100%; max-width: 980px; }
   .tabs {
@@ -758,6 +799,11 @@
 
 <!-- Barra de Opções -->
 <section class="options-bar">
+  <div class="mode-switch" role="group" aria-label="Tipo de sinal">
+    <button class="mode-btn active" id="modeLetters" data-mode="letters" aria-pressed="true">🔤 Letras</button>
+    <button class="mode-btn" id="modeNumbers" data-mode="numbers" aria-pressed="false">🔢 Números</button>
+  </div>
+
   <div class="checkbox-group">
     <label class="checkbox-label">
       <input type="checkbox" id="chkAutoSpeak" checked>
@@ -774,12 +820,14 @@
     <select id="cameraSelect">
       <option value="0">Índice 0 (Webcam padrão)</option>
       <option value="1">Índice 1 (Câmera secundária / Celular)</option>
-      <option value="2">Índice 2 (DroidCam / Iriun)</option>
+      <option value="2" selected>Índice 2 (DroidCam / Iriun)</option>
       <option value="3">Índice 3 (Virtual / USB)</option>
       <option value="browser">🌐 Câmera do Navegador (HTML5)</option>
     </select>
     <button class="btn-switch" id="btnSwitchCamera">Trocar</button>
   </div>
+
+  <span class="mode-hint" id="modeHint" hidden>O modelo ainda não tem números treinados. Colete os números com o collect_data.py e treine de novo.</span>
 </section>
 
 <!-- Card Frase Atual -->
@@ -872,10 +920,14 @@
 <div class="modal-overlay" id="guideModal">
   <div class="modal-window">
     <div class="modal-header">
-      <h3>🤟 Guia do Alfabeto Manual de Libras</h3>
+      <h3>🤟 Guia de Sinais de Libras</h3>
       <button class="modal-close" id="btnCloseGuide">✕</button>
     </div>
     <div class="modal-body">
+      <div class="guide-tabs">
+        <button class="guide-tab active" id="guideTabLetters" data-guide="letters">Letras</button>
+        <button class="guide-tab" id="guideTabNumbers" data-guide="numbers">Números</button>
+      </div>
       <div class="alphabet-grid" id="alphabetGrid"></div>
     </div>
   </div>
@@ -892,6 +944,7 @@
   let browserStream = null;
   let clientProcessInterval = null;
   let activeTab = 'libras';
+  let currentMode = 'letters';
 
   // Vocabulário de apoio
   const VOCABULARIO_SUGESTOES = [
@@ -929,9 +982,26 @@
     { l: 'Z', d: 'Indicador desenhando Z no ar' }
   ];
 
-  function initGuide() {
+  // Descrições resumidas; ajuste conforme o seu material de Libras.
+  const GUIA_NUMEROS = [
+    { l: '0', d: 'Dedos curvados formando um círculo' },
+    { l: '1', d: 'Apenas o indicador levantado' },
+    { l: '2', d: 'Sinal do número 2' },
+    { l: '3', d: 'Sinal do número 3' },
+    { l: '4', d: 'Sinal do número 4' },
+    { l: '5', d: 'Mão aberta, todos os dedos levantados' },
+    { l: '6', d: 'Sinal do número 6' },
+    { l: '7', d: 'Sinal do número 7' },
+    { l: '8', d: 'Sinal do número 8' },
+    { l: '9', d: 'Sinal do número 9' }
+  ];
+
+  function initGuide(kind = 'letters') {
     const grid = $('alphabetGrid');
-    grid.innerHTML = GUIA_ALFABETO.map(item => `
+    const lista = kind === 'numbers' ? GUIA_NUMEROS : GUIA_ALFABETO;
+    $('guideTabLetters').classList.toggle('active', kind !== 'numbers');
+    $('guideTabNumbers').classList.toggle('active', kind === 'numbers');
+    grid.innerHTML = lista.map(item => `
       <div class="alpha-card">
         <div class="alpha-char">${item.l}</div>
         <div class="alpha-desc">${item.d}</div>
@@ -1121,13 +1191,16 @@
     }
     handWasVisible = isVisible;
 
+    if (d.mode) applyMode(d.mode, d.mode_ready);
+    const palavra = currentMode === 'numbers' ? 'Número' : 'Letra';
+
     // Rótulos de estado
     if (isVisible && d.letter !== '-' && d.letter !== '?') {
       letter.textContent = d.letter;
       letter.classList.remove('idle');
       $('dot').className = 'dot on';
       $('statusText').textContent = progress >= 1.0
-        ? 'Letra escrita. Troque de sinal ou tire a mão para repetir.'
+        ? palavra + ' escrito(a). Troque de sinal ou tire a mão para repetir.'
         : 'Segure o sinal...';
     } else if (isVisible) {
       letter.textContent = '?';
@@ -1148,6 +1221,28 @@
     renderText(d.text || '');
     if (d.history !== undefined) renderHistory(d.history);
   }
+
+  // ---------- Modo Letras / Números ----------
+  function applyMode(mode, ready) {
+    currentMode = mode;
+    $('modeLetters').classList.toggle('active', mode === 'letters');
+    $('modeNumbers').classList.toggle('active', mode === 'numbers');
+    $('modeLetters').setAttribute('aria-pressed', mode === 'letters');
+    $('modeNumbers').setAttribute('aria-pressed', mode === 'numbers');
+    $('modeHint').hidden = ready !== false;
+    $('modeHint').textContent = mode === 'numbers'
+      ? 'O modelo ainda não tem números treinados. Colete os números com o collect_data.py e treine de novo.'
+      : 'O modelo ainda não tem letras treinadas.';
+  }
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyMode(btn.dataset.mode, true);
+      sendCommand('set_mode', { mode: btn.dataset.mode });
+    });
+  });
+  document.querySelectorAll('.guide-tab').forEach(btn => {
+    btn.addEventListener('click', () => initGuide(btn.dataset.guide));
+  });
 
   // Polling regular (quando usando OpenCV no servidor)
   async function poll() {
