@@ -210,6 +210,101 @@ mão, em vez de prever uma letra a partir de dados inexistentes.
 | `mp.solutions` não existe | Fixe `mediapipe==0.10.14` |
 | Modelo não encontrado | Rode `train_model.py` antes do `app.py` |
 
+## 🔒 Privacidade e LGPD
+
+Esta seção explica como o Librator trata dados pessoais e como o projeto se
+relaciona com a **Lei Geral de Proteção de Dados (Lei nº 13.709/2018)**.
+
+> ⚠️ É uma análise técnica da equipe, **não um parecer jurídico**. Se o sistema
+> for usado de fato na escola ou por terceiros, consulte o orientador ou o
+> encarregado de dados da instituição.
+
+### Que dados o sistema usa?
+
+| Dado | Origem | Tratamento |
+|------|--------|------------|
+| Imagem da câmera | Usuário, em tempo real | Lida pelo OpenCV na máquina que executa o `app.py` e exibida no navegador por streaming. Serve só para detectar a mão e reconhecer a letra |
+| 21 pontos da mão (*landmarks*) | Extraídos pelo MediaPipe | Coordenadas numéricas que alimentam o classificador |
+| Dataset (`data/landmarks_dataset.csv`) | Coletado pela equipe com o `collect_data.py` | Coordenadas dos landmarks e o rótulo da letra, sem nome nem imagem |
+| Frases montadas e mensagens | Usuário | Aparecem na tela, podem ser lidas em voz alta (TTS) e enviadas ao histórico de conversa com o atendente |
+| Texto digitado na aba "Texto → Libras" (quando ativa) | Usuário | Processado pelo widget oficial VLibras (gov.br), serviço de terceiros |
+
+### Por que o risco é baixo (e onde exige atenção)
+
+- **Landmarks não são imagens.** Coordenadas dos pontos da mão, sem rosto nem
+  fundo, dificilmente identificam alguém sozinhas.
+- **A finalidade é reconhecer gestos, não pessoas.** O sistema não faz
+  identificação nem autenticação biométrica. Dado biométrico vinculado a uma
+  pessoa é dado sensível (art. 5º, II), mas aqui os landmarks não são
+  associados a ninguém.
+- **A imagem da câmera é o ponto sensível.** Rosto, mãos e fundo são dados
+  pessoais se forem gravados ou enviados a algum lugar. O princípio do projeto
+  é **não gravar nem compartilhar os frames**: eles são processados e
+  descartados.
+- **Mensagens e histórico de conversa** podem conter dados pessoais de alunos
+  (nome, RM, assunto de uma solicitação). Se forem salvos em arquivo ou banco,
+  passam a ser tratamento de dados e precisam de prazo de guarda e acesso
+  restrito.
+
+### Princípios da LGPD aplicados
+
+| Princípio | Como o Librator o atende |
+|-----------|--------------------------|
+| **Finalidade** | Os dados servem só para traduzir sinais de Libras em texto |
+| **Adequação** | O tratamento é compatível com a finalidade informada ao usuário |
+| **Necessidade (minimização)** | Só os 21 landmarks são usados; nenhuma imagem entra no dataset |
+| **Transparência** | A interface deve informar que a câmera é usada para reconhecer gestos |
+| **Segurança** | Sem gravação de vídeo; acesso restrito e HTTPS se o sistema for publicado em rede |
+| **Prevenção** | Sem logs, analytics ou cookies que guardem dados do usuário |
+
+### Base legal e exceção acadêmica
+
+A LGPD não se aplica ao tratamento feito exclusivamente para **fins
+acadêmicos**, mas **os arts. 7º e 11 continuam valendo** nesse caso. Ou seja,
+é preciso ter uma base legal:
+
+- **Dataset:** quem contribuiu com amostras no `collect_data.py` deve ter
+  consentido com o uso (uma declaração simples, guardada pela equipe, basta).
+- **Usuários em testes:** o uso da câmera depende de **consentimento
+  informado**. A permissão do navegador não substitui um aviso de privacidade
+  na interface.
+- **Menores de idade:** se o sistema for testado com alunos menores, o art. 14
+  exige tratamento no melhor interesse da criança e **consentimento de um dos
+  pais ou responsável**.
+
+### Rede, celular como câmera e terceiros
+
+- Em `http://localhost:5000` o vídeo não sai da máquina. Se o servidor for
+  aberto para a rede (por exemplo `host="0.0.0.0"`), qualquer pessoa na rede
+  pode ver o streaming. Use só em rede confiável, ou com HTTPS e controle de
+  acesso.
+- **Iriun/DroidCam:** o vídeo do celular passa pelo app da câmera virtual
+  antes de chegar ao Librator. Use a rede local e confie no app instalado.
+- **TTS e VLibras:** informe ao usuário que textos podem ser lidos em voz alta
+  e, na aba "Texto → Libras", enviados ao VLibras. Evite digitar dados pessoais
+  nessa aba.
+
+### Boas práticas no repositório
+
+- Não versionar fotos, vídeos nem prints de pessoas.
+- O dataset deve conter apenas coordenadas e rótulos.
+- O `libras_rf_model.pkl` contém apenas parâmetros do classificador.
+- Se o histórico de conversa for gravado, não versionar esse arquivo.
+
+### ✅ Checklist antes da apresentação
+
+- [ ] Confirmar no `app.py` que **nenhum frame é salvo em disco nem enviado a terceiros**
+- [ ] Confirmar que o `collect_data.py` grava **só landmarks e rótulo**
+- [ ] Confirmar se o histórico de conversa é **persistido** e, se for, por quanto tempo
+- [ ] Adicionar **aviso de privacidade** visível antes de ativar a câmera
+- [ ] Registrar o **consentimento** de quem contribuiu com o dataset
+- [ ] Informar na interface o uso de **TTS** e o envio de texto ao **VLibras**
+- [ ] Se houver teste com menores, obter **autorização dos responsáveis**
+- [ ] Verificar que não há logs, cookies ou analytics coletando dados
+- [ ] Confirmar que o servidor não está exposto na rede sem necessidade
+
+**Referência:** [Lei nº 13.709/2018 (LGPD), texto compilado no Planalto](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/L13709compilado.htm)
+
 ## Tecnologias
 
 Python · OpenCV · MediaPipe · scikit-learn · pandas · NumPy · Flask · HTML/CSS/JS
